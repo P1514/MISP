@@ -232,7 +232,9 @@ class AadAuthenticateAuthenticate extends BaseAuthenticate {
 					// For debug : "PHP_Error" => error_get_last(), "\$_GET[]" => $_GET, "HTTP_msg" => $options), $error_email);
 					return false;
 				}*/
-				$userdata = json_encode(base64_decode(explode(".", $authdata["id_token"])[1]),true);  //This should now contain your logged on user information
+				$userdata = explode(".", $authdata["id_token"])[1];
+				$userdata = base64_decode($userdata);
+				$userdata = json_decode($userdata,true);
 				if (isset($userdata["error"])){
 					$this->_log("warning", "User data fetch contained an error.");
 					// For debug : "\$userdata[]" => $userdata, "\$authdata[]" => $authdata, "\$_GET[]" => $_GET, "HTTP_msg" => $options), $error_email);
