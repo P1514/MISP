@@ -233,7 +233,7 @@ class AadAuthenticateAuthenticate extends BaseAuthenticate {
 					return false;
 				}*/
 
-				$userdata = base64_decode($authdata["id_token"]);  //This should now contain your logged on user information
+				$userdata = json_encode(base64_decode($authdata["id_token"]),true);  //This should now contain your logged on user information
 				if (isset($userdata["error"])){
 					$this->_log("warning", "User data fetch contained an error.");
 					// For debug : "\$userdata[]" => $userdata, "\$authdata[]" => $authdata, "\$_GET[]" => $_GET, "HTTP_msg" => $options), $error_email);
@@ -241,8 +241,8 @@ class AadAuthenticateAuthenticate extends BaseAuthenticate {
 				} 
 
 				$mispUsername = false;
-				if (isset($userdata["email"])){
-					$userPrincipalName = $userdata["email"];
+				if (isset($userdata["preferred_username"])){
+					$userPrincipalName = $userdata["preferred_username"];
 
 					/*
 					 * TODO: add code to create users that exist in AAD but not in MISP
