@@ -214,7 +214,7 @@ class AadAuthenticateAuthenticate extends BaseAuthenticate {
 					// For debug : "\$authdata[]" => $authdata, "\$_GET[]" => $_GET, "HTTP_msg" => $options), $error_email);
 					return false;
 				}
-
+				/*
 				$options = array(
 					"http" => array(  //Use "http" even if you send the request with https
 					"method" => "GET",
@@ -230,9 +230,9 @@ class AadAuthenticateAuthenticate extends BaseAuthenticate {
 					$this->_log("warning", "Error received during user data fetch.");
 					// For debug : "PHP_Error" => error_get_last(), "\$_GET[]" => $_GET, "HTTP_msg" => $options), $error_email);
 					return false;
-				}
+				}*/
 
-				$userdata = json_decode($json, true);  //This should now contain your logged on user information
+				$userdata = base64_decode($authdata["id_token"]);  //This should now contain your logged on user information
 				if (isset($userdata["error"])){
 					$this->_log("warning", "User data fetch contained an error.");
 					// For debug : "\$userdata[]" => $userdata, "\$authdata[]" => $authdata, "\$_GET[]" => $_GET, "HTTP_msg" => $options), $error_email);
@@ -240,8 +240,8 @@ class AadAuthenticateAuthenticate extends BaseAuthenticate {
 				} 
 
 				$mispUsername = false;
-				if (isset($userdata["userPrincipalName"])){
-					$userPrincipalName = $userdata["userPrincipalName"];
+				if (isset($userdata["email"])){
+					$userPrincipalName = $userdata["email"];
 
 					/*
 					 * TODO: add code to create users that exist in AAD but not in MISP
