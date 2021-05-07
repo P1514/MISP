@@ -191,6 +191,7 @@ class AadAuthenticateAuthenticate extends BaseAuthenticate {
 				$content .= "&redirect_uri=" . urlencode(self::$redirect_uri);
 				$content .= "&code=" . $_GET["code"];
 				$content .= "&client_secret=" . urlencode(self::$client_secret);
+				$conent .= "&scope=openid profile";
 				$options = array(
 					"http" => array(  //Use "http" even if you send the request with https
 					"method"  => "POST",
