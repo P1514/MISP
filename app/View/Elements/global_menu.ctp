@@ -34,11 +34,6 @@
                         'url' => $baseurl . '/attributes/search'
                     ),
                     array(
-                        'text' => __('REST client'),
-                        'url' => $baseurl . '/servers/rest',
-                        'requirement' => $canAccess('servers', 'rest'),
-                    ),
-                    array(
                         'type' => 'separator'
                     ),
                     array(
@@ -459,7 +454,7 @@
             ),
             array(
                 'type' => 'root',
-                'text' => __('Audit'),
+                'text' => __('Logs'),
                 'requirement' => $isAclAudit,
                 'children' => array(
                     array(
@@ -467,8 +462,28 @@
                         'url' => $baseurl . '/admin/logs/index'
                     ),
                     array(
+                        'text' => __('List Audit Logs'),
+                        'url' => $baseurl . '/admin/audit_logs/index',
+                        'requirement' => Configure::read('MISP.log_new_audit'),
+                    ),
+                    array(
                         'text' => __('Search Logs'),
                         'url' => $baseurl . '/admin/logs/search'
+                    )
+                )
+                    ),
+            array(
+                'type' => 'root',
+                'text' => __('API'),
+                'children' => array(
+                    array(
+                        'text' => __('OpenAPI'),
+                        'url' => $baseurl . '/servers/openapi'
+                    ),
+                    array(
+                        'text' => __('REST client'),
+                        'url' => $baseurl . '/servers/rest',
+                        'requirement' => $canAccess('servers', 'rest')
                     )
                 )
             )

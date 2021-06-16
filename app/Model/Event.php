@@ -17,6 +17,7 @@ App::uses('SendEmailTemplate', 'Tools');
 class Event extends AppModel
 {
     public $actsAs = array(
+        'AuditLog',
         'SysLogLogable.SysLogLogable' => array(
             'userModel' => 'User',
             'userKey' => 'user_id',
@@ -1003,17 +1004,28 @@ class Event extends AppModel
     private function __prepareForPushToServer($event, $server)
     {
         if ($event['Event']['distribution'] == 4) {
-            if (!empty($event['SharingGroup']['SharingGroupServer'])) {
-                $found = false;
-                foreach ($event['SharingGroup']['SharingGroupServer'] as $sgs) {
-                    if ($sgs['server_id'] == $server['Server']['id']) {
-                        $found = true;
+            if (empty($event['SharingGroup']['SharingGroup']['roaming']) && empty($server['Server']['internal'])) {
+                $serverFound = false;
+                if (!empty($event['SharingGroup']['SharingGroupServer'])) {
+                    foreach ($event['SharingGroup']['SharingGroupServer'] as $sgs) {
+                        if ($sgs['server_id'] == $server['Server']['id']) {
+                            $serverFound = true;
+                        }
                     }
                 }
-                if (!$found) {
+                if (!$serverFound) {
                     return 403;
                 }
-            } else if (empty($event['SharingGroup']['roaming'])) {
+            }
+            $orgFound = false;
+            if (!empty($event['SharingGroup']['SharingGroupOrg'])) {
+                foreach ($event['SharingGroup']['SharingGroupOrg'] as $org) {
+                    if (isset($org['Organisation']) && $org['Organisation']['uuid'] === $server['RemoteOrg']['uuid']) {
+                        $orgFound = true;
+                    }
+                }
+            }
+            if (!$orgFound) {
                 return 403;
             }
         }
@@ -2991,9 +3003,20 @@ class Event extends AppModel
     public function set_filter_value(&$params, $conditions, $options, $keys = array('Attribute.value1', 'Attribute.value2'))
     {
         if (!empty($params['value'])) {
+            $valueParts = explode('|', $params['value'], 2);
             $params[$options['filter']] = $this->convert_filters($params[$options['filter']]);
             $conditions = $this->generic_add_filter($conditions, $params[$options['filter']], $keys);
-
+            // Allows searching for ['value1' => [full, part1], 'value2' => [full, part2]]
+            if (count($valueParts) == 2) {
+                $convertedFilterVal1 = $this->convert_filters($valueParts[0]);
+                $convertedFilterVal2 = $this->convert_filters($valueParts[1]);
+                $conditionVal1 = $this->generic_add_filter([], $convertedFilterVal1, ['Attribute.value1'])['AND'][0]['OR'];
+                $conditionVal2 = $this->generic_add_filter([], $convertedFilterVal2, ['Attribute.value2'])['AND'][0]['OR'];
+                $tmpConditions = [
+                    'AND' => [$conditionVal1, $conditionVal2]
+                ];
+                $conditions['AND'][0]['OR']['OR']['AND'] = [$conditionVal1, $conditionVal2];
+            }
         }
         return $conditions;
     }
@@ -3296,7 +3319,11 @@ class Event extends AppModel
         $subjMarkingString = $this->getEmailSubjectMarkForEvent($event);
         $subject = "[" . Configure::read('MISP.org') . " MISP] Event {$event['Event']['id']} - $subject$threatLevel" . strtoupper($subjMarkingString);
 
-        $template = new SendEmailTemplate('alert');
+        if (!empty(Configure::read('MISP.publish_alerts_summary_only'))) {
+            $template = new SendEmailTemplate('alert_light');
+        } else {
+            $template = new SendEmailTemplate('alert');
+        }
         $template->set('event', $event);
         $template->set('user', $user);
         $template->set('oldPublishTimestamp', $oldpublish);
@@ -6299,14 +6326,13 @@ class Event extends AppModel
                 } else {
                     $failed_attributes++;
                     $lastAttributeError = $this->Attribute->validationErrors;
-                    $original_uuid = $this->Object->Attribute->find('first', array(
-                        'conditions' => array('Attribute.event_id' => $id, 'Attribute.object_id' => 0, 'Attribute.deleted' => 0,
-                                              'Attribute.type' => $attribute['type'], 'Attribute.value' => $attribute['value']),
-                        'recursive' => -1,
-                        'fields' => array('Attribute.uuid')
-                    ));
+                    $original_uuid = $this->__findOriginalUUID(
+                        $attribute['type'],
+                        $attribute['value'],
+                        $id
+                    );
                     if (!empty($original_uuid)) {
-                        $recovered_uuids[$attribute['uuid']] = $original_uuid['Attribute']['uuid'];
+                        $recovered_uuids[$attribute['uuid']] = $original_uuid;
                     } else {
                         $failed[] = $attribute['uuid'];
                     }
@@ -6429,53 +6455,53 @@ class Event extends AppModel
                     $this->Job->saveField('progress', (($current + $total_attributes) * 100 / $items_count));
                 }
             }
-        }
-        if (!empty($references)) {
-            $reference_errors = array();
-            foreach($references as $reference) {
-                $object_id = $reference['objectId'];
-                $reference = $reference['reference'];
-                if (in_array($reference['object_uuid'], $failed) || in_array($reference['referenced_uuid'], $failed)) {
-                    continue;
-                }
-                if (isset($recovered_uuids[$reference['object_uuid']])) {
-                    $reference['object_uuid'] = $recovered_uuids[$reference['object_uuid']];
-                }
-                if (isset($recovered_uuids[$reference['referenced_uuid']])) {
-                    $reference['referenced_uuid'] = $recovered_uuids[$reference['referenced_uuid']];
-                }
-                $current_reference = $this->Object->ObjectReference->find('all', array(
-                    'conditions' => array('ObjectReference.object_id' => $object_id,
-                                          'ObjectReference.referenced_uuid' => $reference['referenced_uuid'],
-                                          'ObjectReference.relationship_type' => $reference['relationship_type'],
-                                          'ObjectReference.event_id' => $id, 'ObjectReference.deleted' => 0),
-                    'recursive' => -1,
-                    'fields' => ('ObjectReference.uuid')
-                ));
-                if (!empty($current_reference)) {
-                    continue;
-                }
-                list($referenced_id, $referenced_uuid, $referenced_type) = $this->Object->ObjectReference->getReferencedInfo(
-                        $reference['referenced_uuid'],
-                        array('Event' => array('id' => $id)),
-                        false,
-                        $user
-                );
-                if (!$referenced_id && !$referenced_uuid && !$referenced_type) {
-                    continue;
-                }
-                $reference = array(
-                    'event_id' => $id,
-                    'referenced_id' => $referenced_id,
-                    'referenced_uuid' => $referenced_uuid,
-                    'referenced_type' => $referenced_type,
-                    'object_id' => $object_id,
-                    'object_uuid' => $reference['object_uuid'],
-                    'relationship_type' => $reference['relationship_type']
-                );
-                $this->Object->ObjectReference->create();
-                if (!$this->Object->ObjectReference->save($reference)) {
-                    $reference_errors[] = $this->Object->ObjectReference->validationErrors;
+            if (!empty($references)) {
+                $reference_errors = array();
+                foreach($references as $reference) {
+                    $object_id = $reference['objectId'];
+                    $reference = $reference['reference'];
+                    if (in_array($reference['object_uuid'], $failed) || in_array($reference['referenced_uuid'], $failed)) {
+                        continue;
+                    }
+                    if (isset($recovered_uuids[$reference['object_uuid']])) {
+                        $reference['object_uuid'] = $recovered_uuids[$reference['object_uuid']];
+                    }
+                    if (isset($recovered_uuids[$reference['referenced_uuid']])) {
+                        $reference['referenced_uuid'] = $recovered_uuids[$reference['referenced_uuid']];
+                    }
+                    $current_reference = $this->Object->ObjectReference->find('all', array(
+                        'conditions' => array('ObjectReference.object_id' => $object_id,
+                                              'ObjectReference.referenced_uuid' => $reference['referenced_uuid'],
+                                              'ObjectReference.relationship_type' => $reference['relationship_type'],
+                                              'ObjectReference.event_id' => $id, 'ObjectReference.deleted' => 0),
+                        'recursive' => -1,
+                        'fields' => ('ObjectReference.uuid')
+                    ));
+                    if (!empty($current_reference)) {
+                        continue;
+                    }
+                    list($referenced_id, $referenced_uuid, $referenced_type) = $this->Object->ObjectReference->getReferencedInfo(
+                            $reference['referenced_uuid'],
+                            array('Event' => array('id' => $id)),
+                            false,
+                            $user
+                    );
+                    if (!$referenced_id && !$referenced_uuid && !$referenced_type) {
+                        continue;
+                    }
+                    $reference = array(
+                        'event_id' => $id,
+                        'referenced_id' => $referenced_id,
+                        'referenced_uuid' => $referenced_uuid,
+                        'referenced_type' => $referenced_type,
+                        'object_id' => $object_id,
+                        'object_uuid' => $reference['object_uuid'],
+                        'relationship_type' => $reference['relationship_type']
+                    );
+                    $this->Object->ObjectReference->create();
+                    if (!$this->Object->ObjectReference->save($reference)) {
+                        $reference_errors[] = $this->Object->ObjectReference->validationErrors;
+                    }
                 }
             }
         }
@@ -6610,6 +6636,52 @@ class Event extends AppModel
             }
         }
         return 0;
+    }
+
+    private function __findOriginalUUID($attribute_type, $attribute_value, $event_id)
+    {
+        $original_uuid = $this->Object->Attribute->find(
+            'first',
+            array(
+                'conditions' => array(
+                    'Attribute.event_id' => $event_id,
+                    'Attribute.deleted' => 0,
+                    'Attribute.object_id' => 0,
+                    'Attribute.type' => $attribute_type,
+                    'Attribute.value' => $attribute_value
+                ),
+                'recursive' => -1,
+                'fields' => array('Attribute.uuid')
+            )
+        );
+        if (!empty($original_uuid)) {
+            return ['Attribute']['uuid'];
+        }
+        $original_uuid = $this->Object->find(
+            'first',
+            array(
+                'conditions' => array(
+                    'Attribute.event_id' => $event_id,
+                    'Attribute.deleted' => 0,
+                    'Attribute.type' => $attribute_type,
+                    'Attribute.value1' => $attribute_value,
+                    'Object.event_id' => $event_id
+                ),
+                'recursive' => -1,
+                'fields' => array('Object.uuid'),
+                'joins' => array(
+                    array(
+                        'table' => 'attributes',
+                        'alias' => 'Attribute',
+                        'type' => 'inner',
+                        'conditions' => array(
+                            'Attribute.object_id = Object.id'
+                        )
+                    )
+                )
+            )
+        );
+        return (!empty($original_uuid)) ? $original_uuid['Object']['uuid'] : $original_uuid;
     }
 
     private function __saveObjectAttribute($attribute, $default_comment, $event_id, $object_id, $user)
