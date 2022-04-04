@@ -27,13 +27,12 @@ switch ($object['type']) {
     case 'malware-sample':
         if ($object['type'] === 'attachment' && isset($object['image'])) {
             if ($object['image'] === true) {
-                $img = '<it class="fa fa-spin fa-spinner" style="font-size: large; left: 50%; top: 50%;"></it>';
-                $img .= '<img class="screenshot screenshot-collapsed useCursorPointer img-rounded hidden" src="' . $baseurl . sprintf('/%s/viewPicture/', $object['objectType'] == 'proposal' ? 'shadowAttributes' : 'attributes') . h($object['id']) . '/1' . '" title="' . h($object['value']) . '" onload="$(this).show(200); $(this).parent().find(\'.fa-spinner\').remove();"/>';
-                echo $img;
+                $src = $baseurl . '/' . ($object['objectType'] === 'proposal' ? 'shadowAttributes' : 'attributes') . '/viewPicture/' . (int)$object['id'] . '/1';
+                echo '<img class="screenshot screenshot-collapsed useCursorPointer img-rounded" src="' . $src . '" title="' . h($object['value']) . '" loading="lazy">';
             } else {
                 $extension = pathinfo($object['value'], PATHINFO_EXTENSION);
                 $uri = 'data:image/' . strtolower(h($extension)) . ';base64,' . h($object['image']);
-                echo '<img class="screenshot screenshot-collapsed useCursorPointer" src="' . $uri . '" title="' . h($object['value']) . '" />';
+                echo '<img class="screenshot screenshot-collapsed useCursorPointer" src="' . $uri . '" title="' . h($object['value']) . '">';
             }
         } else {
             $filenameHash = explode('|', h($object['value']));
@@ -171,7 +170,11 @@ if (isset($object['validationIssue'])) {
 if (isset($object['warnings'])) {
     $temp = '';
     foreach ($object['warnings'] as $warning) {
-        $temp .= '<span class="bold">' . h($warning['match']) . ':</span> <span class="red">' . h($warning['warninglist_name']) . '</span><br>';
+        $temp .= '<span class="bold">' . h($warning['match']) . ':</span> <span class="red">' . h($warning['warninglist_name']) . '</span>';
+        if (isset($warning['comment'])) {
+            $temp .= ' (' . h($warning['comment']) . ')';
+        }
+        $temp .= '<br>';
     }
     echo ' <span aria-label="' . __('warning') . '" role="img" tabindex="0" class="fa fa-exclamation-triangle" data-placement="right" data-toggle="popover" data-content="' . h($temp) . '" data-trigger="hover">&nbsp;</span>';
 }

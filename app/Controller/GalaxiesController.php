@@ -216,23 +216,7 @@ class GalaxiesController extends AppController
                 $clusters = $this->request->data;
             } else {
                 $data = $this->request->data['Galaxy'];
-                if ($data['submittedjson']['name'] != '' && $data['json'] != '') {
-                    throw new MethodNotAllowedException(__('Only one import field can be used at a time'));
-                }
-                if ($data['submittedjson']['size'] > 0) {
-                    $filename = basename($data['submittedjson']['name']);
-                    $file_content = file_get_contents($data['submittedjson']['tmp_name']);
-                    if ((isset($data['submittedjson']['error']) && $data['submittedjson']['error'] == 0) ||
-                        (!empty($data['submittedjson']['tmp_name']) && $data['submittedjson']['tmp_name'] != '')
-                    ) {
-                        if (!$file_content) {
-                            throw new InternalErrorException(__('PHP says file was not uploaded. Are you attacking me?'));
-                        }
-                    }
-                    $text = $file_content;
-                } else {
-                    $text = $data['json'];
-                }
+                $text = FileAccessTool::getTempUploadedFile($data['submittedjson'], $data['json']);
                 $clusters = json_decode($text, true);
                 if ($clusters === null) {
                     throw new MethodNotAllowedException(__('Error while decoding JSON'));
@@ -339,6 +323,11 @@ class GalaxiesController extends AppController
         $conditions[] = [
             'enabled' => true
         ];
+        if(!$local) {
+            $conditions[] = [
+                'local_only' => 0
+            ];
+        }
         $galaxies = $this->Galaxy->find('all', array(
             'recursive' => -1,
             'fields' => array('MAX(Galaxy.version) as latest_version', 'id', 'kill_chain_order', 'name', 'icon', 'description'),
@@ -528,8 +517,9 @@ class GalaxiesController extends AppController
 
     public function attachCluster($target_id, $target_type = 'event')
     {
+        $local = !empty($this->params['named']['local']);
         $cluster_id = $this->request->data['Galaxy']['target_id'];
-        $result = $this->Galaxy->attachCluster($this->Auth->user(), $target_type, $target_id, $cluster_id);
+        $result = $this->Galaxy->attachCluster($this->Auth->user(), $target_type, $target_id, $cluster_id, $local);
         return new CakeResponse(array('body'=> json_encode(array('saved' => true, 'success' => $result, 'check_publish' => true)), 'status'=>200, 'type' => 'json'));
     }
 

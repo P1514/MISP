@@ -27,26 +27,20 @@ $divider = $this->element('/genericElements/SideMenu/side_menu_divider');
                     echo $this->element('/genericElements/SideMenu/side_menu_link', array(
                         'element_id' => 'dashboardImport',
                         'text' => __('Import Config JSON'),
-                        'onClick' => array(
-                            'function' => 'openGenericModal',
-                            'params' => array($baseurl . '/dashboards/import')
-                        ),
+                        'url' => $baseurl . '/dashboards/import',
+                        'link_class' => 'modal-open',
                     ));
                     echo $this->element('/genericElements/SideMenu/side_menu_link', array(
                         'element_id' => 'dashboardExport',
                         'text' => __('Export Config JSON'),
-                        'onClick' => array(
-                            'function' => 'openGenericModal',
-                            'params' => array($baseurl . '/dashboards/export')
-                        ),
+                        'url' => $baseurl . '/dashboards/export',
+                        'link_class' => 'modal-open',
                     ));
                     echo $this->element('/genericElements/SideMenu/side_menu_link', array(
                         'element_id' => 'dashboardSave',
                         'text' => __('Save Dashboard Config'),
-                        'onClick' => array(
-                            'function' => 'openGenericModal',
-                            'params' => array($baseurl . '/dashboards/saveTemplate')
-                        ),
+                        'url' => $baseurl . '/dashboards/saveTemplate',
+                        'link_class' => 'modal-open',
                     ));
                     echo $this->element('/genericElements/SideMenu/side_menu_link', array(
                         'element_id' => 'dashboardTemplateIndex',
@@ -55,7 +49,7 @@ $divider = $this->element('/genericElements/SideMenu/side_menu_divider');
                     ));
                     break;
                 case 'event':
-                    $eventId = intval($event['Event']['id']);
+                    $eventId = (int)$event['Event']['id'];
                     echo '<div id="hiddenSideMenuData" class="hidden" data-event-id="' . $eventId . '"></div>';
                     if (in_array($menuItem, array('editEvent', 'addAttribute', 'addObject', 'addAttachment', 'addIOC', 'addThreatConnect', 'populateFromTemplate', 'merge'))) {
                         // we can safely assume that mayModify is true if coming from these actions, as they require it in the controller and the user has already passed that check
@@ -284,6 +278,13 @@ $divider = $this->element('/genericElements/SideMenu/side_menu_divider');
                         ));
                     }
                 break;
+
+                case 'event_restsearch_export':
+                    echo $this->element('/genericElements/SideMenu/side_menu_link', array(
+                        'url' => $baseurl . '/events/index',
+                        'text' => __('List Events')
+                    ));
+                    break;
 
                 case 'tag-collections':
                     echo $this->element('/genericElements/SideMenu/side_menu_link', array(
@@ -672,6 +673,25 @@ $divider = $this->element('/genericElements/SideMenu/side_menu_divider');
                             'text' => __('View Sharing Group')
                         ));
                     }
+                    if ($menuItem === 'editMG' || ($menuItem == 'viewMG' && $isAclSharingGroup)) {
+                        echo $this->element('/genericElements/SideMenu/side_menu_link', array(
+                            'element_id' => 'editMG',
+                            'url' => $baseurl . '/sharing_group_blueprints/edit/' . h($id),
+                            'text' => __('Edit Sharing Group Blueprint')
+                        ));
+                        echo $this->element('/genericElements/SideMenu/side_menu_link', array(
+                            'element_id' => 'viewMG',
+                            'url' => $baseurl . '/sharing_group_blueprints/view/' . h($id),
+                            'text' => __('View Sharing Group Blueprint')
+                        ));
+                        echo $this->element('/genericElements/SideMenu/side_menu_link', array(
+                            'text' => __('Execute Sharing Group Blueprint'),
+                            'onClick' => array(
+                                'function' => 'openGenericModal',
+                                'params' => array($baseurl . '/sharing_group_blueprints/execute/' . h($id))
+                            ),
+                        ));
+                    }
                     echo $this->element('/genericElements/SideMenu/side_menu_link', array(
                         'element_id' => 'indexSG',
                         'url' => $baseurl . '/sharing_groups/index',
@@ -682,6 +702,16 @@ $divider = $this->element('/genericElements/SideMenu/side_menu_divider');
                             'element_id' => 'addSG',
                             'url' => $baseurl . '/sharing_groups/add',
                             'text' => __('Add Sharing Group')
+                        ));
+                        echo $this->element('/genericElements/SideMenu/side_menu_link', array(
+                            'element_id' => 'indexMG',
+                            'url' => $baseurl . '/sharing_group_blueprints/index',
+                            'text' => __('List Sharing Group Blueprints')
+                        ));
+                        echo $this->element('/genericElements/SideMenu/side_menu_link', array(
+                            'element_id' => 'addMG',
+                            'url' => $baseurl . '/sharing_group_blueprints/add',
+                            'text' => __('Add Sharing Group Blueprint')
                         ));
                     }
                     echo $divider;

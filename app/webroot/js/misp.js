@@ -12,6 +12,14 @@ if (!String.prototype.startsWith) {
   };
 }
 
+function copyToClipboard(element) {
+    var $temp = $("<input>");
+    $("body").append($temp);
+    $temp.val($(element).val()).select();
+    document.execCommand("copy");
+    $temp.remove();
+}
+
 function stringToRGB(str){
     var hash = 0;
     if (str.length == 0) return hash;
@@ -175,8 +183,7 @@ function cancelPrompt(isolated) {
         $("#gray_out").fadeOut();
     }
     $("#popover_form").fadeOut();
-    $("#confirmation_box").fadeOut();
-    $("#confirmation_box").empty();
+    $("#confirmation_box").fadeOut().empty();
     $('.have-a-popover').popover('destroy');
 }
 
@@ -898,6 +905,19 @@ function multiSelectDeleteEvents() {
     }).fail(xhrFailCallback);
 }
 
+function multiSelectExportEvents() {
+    var selected = [];
+    $(".select").each(function() {
+        if ($(this).is(":checked")) {
+            var temp = $(this).data("uuid");
+            if (temp != null) {
+                selected.push(temp);
+            }
+        }
+    });
+    openGenericModal(baseurl + "/events/restSearchExport/" + JSON.stringify(selected))
+}
+
 function multiSelectToggleFeeds(on, cache) {
     var selected = [];
     $(".select").each(function() {
@@ -1124,10 +1144,11 @@ function removeEventTag(event, tag) {
 
 function loadAttributeTags(id) {
     $.ajax({
-        dataType:"html",
+        dataType: "html",
         cache: false,
-        success:function (data) {
-            $("#Attribute_"+id+"_tr .attributeTagContainer").html(data);
+        success: function (data) {
+            // different approach for event view and attribute view
+            $("#Attribute_" + id + "_tr .attributeTagContainer, [data-primary-id=" + id + "] .attributeTagContainer").html(data);
         },
         error: xhrFailCallback,
         url: baseurl + "/tags/showAttributeTag/" + id
@@ -1199,13 +1220,12 @@ function openGenericModal(url, modalData, callback) {
             } else {
                 htmlData = data;
             }
-            $('body').append(htmlData);
+            $(document.body).append(htmlData);
             $('#genericModal').modal().on('shown', function() {
                 if (callback !== undefined) {
                     callback();
                 }
             });
-
         },
         error: function (data, textStatus, errorThrown) {
             showMessage('fail', textStatus + ": " + errorThrown);
@@ -2086,6 +2106,27 @@ function indexEvaluateFiltering() {
             }
         }
         $('#value_date').html(text);
+
+        if (filtering.timestamp.from != null) {
+            var text = "";
+            if (filtering.timestamp.from != "") text = "From: " + $('<span>').text(filtering.timestamp.from).html();
+            if (filtering.timestamp.until != "") {
+                if (text != "") text += " ";
+                text += "Until: " + $('<span>').text(filtering.timestamp.until).html();
+            }
+        }
+        $('#value_timestamp').html(text);
+
+        if (filtering.publishtimestamp.from != null) {
+            var text = "";
+            if (filtering.publishtimestamp.from != "") text = "From: " + $('<span>').text(filtering.publishtimestamp.from).html();
+            if (filtering.publishtimestamp.until != "") {
+                if (text != "") text += " ";
+                text += "Until: " + $('<span>').text(filtering.publishtimestamp.until).html();
+            }
+        }
+        $('#value_publishtimestamp').html(text);
+
         for (var i = 0; i < simpleFilters.length; i++) {
             indexEvaluateSimpleFiltering(simpleFilters[i]);
         }
@@ -2228,7 +2269,7 @@ function runIndexQuickFilterFixed(preserveParams, url, target) {
         delete preserveParams[searchKey]
     }
     for (var key in preserveParams) {
-        if (typeof key == 'number') {
+        if (!isNaN(key)) {
             url += "/" + preserveParams[key];
         } else if (key !== 'page') {
             url += "/" + key + ":" + preserveParams[key];
@@ -2310,6 +2351,22 @@ function indexCreateFilters() {
             if (text != "") text += "/";
             text += "searchDateuntil:" + filtering.date.until;
         }
+        if (filtering.timestamp.from) {
+            if (text != "") text += "/";
+            text += "searchTimestamp:" + filtering.timestamp.from;
+        }
+        if (filtering.timestamp.until) {
+            if (text != "") text += "/";
+            text += "searchTimestamp:" + filtering.timestamp.until;
+        }
+        if (filtering.publishtimestamp.from) {
+            if (text != "") text += "/";
+            text += "searchPublishTimestamp:" + filtering.publishtimestamp.from;
+        }
+        if (filtering.publishtimestamp.until) {
+            if (text != "") text += "/";
+            text += "searchPublishTimestamp:" + filtering.publishtimestamp.until;
+        }
         return baseurl + '/events/index/' + text;
     } else {
         return baseurl + '/admin/users/index/' + text;
@@ -2385,11 +2442,11 @@ function indexEvaluateSimpleFiltering(field) {
 function indexAddRule(param) {
     var found = false;
     if (filterContext == 'event') {
-        if (param.data.param1 == "date") {
+        if (param.data.param1 == "date" || param.data.param1 == "timestamp" || param.data.param1 == "publishtimestamp") {
             var val1 = encodeURIComponent($('#EventSearch' + param.data.param1 + 'from').val());
             var val2 = encodeURIComponent($('#EventSearch' + param.data.param1 + 'until').val());
-            if (val1 != "") filtering.date.from = val1;
-            if (val2 != "") filtering.date.until = val2;
+            if (val1 != "") filtering[param.data.param1].from = val1;
+            if (val2 != "") filtering[param.data.param1].until = val2;
         } else if (param.data.param1 == "published") {
             var value = encodeURIComponent($('#EventSearchpublished').val());
             if (value != "") filtering.published = value;
@@ -2428,7 +2485,7 @@ function indexRuleChange() {
     $('[id^=' + context + 'Search]').hide();
     var rule = $('#' + context + 'Rule').val();
     var fieldName = '#' + context + 'Search' + rule;
-    if (fieldName === '#' + context + 'Searchdate') {
+    if (fieldName === '#' + context + 'Searchdate' || fieldName === '#' + context + 'Searchtimestamp' || fieldName === '#' + context + 'Searchpublishtimestamp') {
         $(fieldName + 'from').show();
         $(fieldName + 'until').show();
     } else {
@@ -2451,6 +2508,12 @@ function indexFilterClearRow(field) {
     if (field == "date") {
         filtering.date.from = "";
         filtering.date.until = "";
+    } else if (field == "timestamp") {
+        filtering.timestamp.from = "";
+        filtering.timestamp.until = "";
+    } else if (field == "publishtimestamp") {
+        filtering.publishtimestamp.from = "";
+        filtering.publishtimestamp.until = "";
     } else if (field == "published") {
         filtering.published = 2;
     } else if (field == "hasproposal") {
@@ -3153,15 +3216,16 @@ function cancelPicklistValues() {
 
 function sgSubmitForm(action) {
     var ajax = {
-            'organisations': organisations,
-            'servers': servers,
-            'sharingGroup': {
-                'name': $('#SharingGroupName').val(),
-                'releasability': $('#SharingGroupReleasability').val(),
-                'description': $('#SharingGroupDescription').val(),
-                'active': $('#SharingGroupActive').is(":checked"),
-                'roaming': $('#SharingGroupRoaming').is(":checked"),
-            }
+        'organisations': organisations,
+        'servers': servers,
+        'sharingGroup': {
+            'uuid': $('#SharingGroupUuid').val(),
+            'name': $('#SharingGroupName').val(),
+            'releasability': $('#SharingGroupReleasability').val(),
+            'description': $('#SharingGroupDescription').val(),
+            'active': $('#SharingGroupActive').is(":checked"),
+            'roaming': $('#SharingGroupRoaming').is(":checked"),
+        }
     };
     $('#SharingGroupJson').val(JSON.stringify(ajax));
     var formName = "#SharingGroup" + action + "Form";
@@ -3223,6 +3287,7 @@ function sharingGroupPopulateFromJson() {
     }
     $('#SharingGroupName').attr('value', jsonparsed.sharingGroup.name);
     $('#SharingGroupReleasability').attr('value', jsonparsed.sharingGroup.releasability);
+    $('#SharingGroupUuid').attr('value', jsonparsed.sharingGroup.uuid);
     $('#SharingGroupDescription').text(jsonparsed.sharingGroup.description);
 }
 
@@ -3282,23 +3347,25 @@ function getRemoteSyncUser(id) {
     var resultContainer = $("#sync_user_test_" + id);
     $.ajax({
         url: baseurl + '/servers/getRemoteUser/' + id,
-        type:'GET',
+        type: 'GET',
         beforeSend: function () {
-            resultContainer.html('Running test...');
+            resultContainer.text('Running test...');
         },
         error: function() {
-            resultContainer.html('Internal error.');
+            resultContainer.html('<span class="red bold">Internal error</span>');
         },
         success: function(response) {
             resultContainer.empty();
-            if (typeof(response.message) != 'undefined') {
+            if (typeof response !== 'object') {
+                resultContainer.html('<span class="red bold">Internal error</span>');
+            } else if ("error" in response) {
                 resultContainer.append(
                     $('<span>')
-                    .attr('class', 'red bold')
-                    .text('Error')
+                        .attr('class', 'red bold')
+                        .text('Error')
                 ).append(
                     $('<span>')
-                    .text(': #' + response.message)
+                        .text(': #' + response.error)
                 );
             } else {
                 Object.keys(response).forEach(function(key) {
@@ -3496,7 +3563,7 @@ function convertServerFilterRules(rules) {
             rules[type] = JSON.parse($(container).val());
         } else {
             if (type === 'pull') {
-                rules[type] = {"tags": {"OR": [], "NOT": []}, "orgs": {"OR": [], "NOT": []}, "url_params": ""}
+                rules[type] = {"tags": {"OR": [], "NOT": []}, "orgs": {"OR": [], "NOT": []}, "type_attributes": {"NOT": []}, "type_objects": {"NOT": []}, "url_params": ""}
             } else {
                 rules[type] = {"tags": {"OR": [], "NOT": []}, "orgs": {"OR": [], "NOT": []}}
             }
@@ -3510,26 +3577,35 @@ function serverRuleUpdate() {
     var statusOptions = ["OR", "NOT"];
     validOptions.forEach(function(type) {
         validFields.forEach(function(field) {
-            if (type === 'push') {
-                var indexedList = {};
-                window[field].forEach(function(item) {
-                    indexedList[item.id] = item.name;
-                });
+            var indexedList = {};
+            if (type === 'push' || field == 'type_objects') {
+                if (window[field] !== undefined) {
+                    window[field].forEach(function(item) {
+                        indexedList[item.id] = item.name;
+                    });
+                }
             }
             statusOptions.forEach(function(status) {
-                if (rules[type][field][status].length > 0) {
-                    $('#' + type + '_' + field + '_' + status).show();
-                    var t = '';
-                    rules[type][field][status].forEach(function(item) {
-                        if (t.length > 0) t += ', ';
-                        if (type === 'pull') t += item;
-                        else {
-                            t += indexedList[item] !== undefined ? indexedList[item] : item;
-                        }
-                    });
-                    $('#' + type + '_' + field + '_' + status + '_text').text(t);
-                } else {
-                    $('#' + type + '_' + field + '_' + status).hide();
+                if (rules[type][field] !== undefined && rules[type][field][status] !== undefined) {
+                    if (rules[type][field][status].length > 0) {
+                        $('#' + type + '_' + field + '_' + status).show();
+                        var t = '';
+                        rules[type][field][status].forEach(function(item) {
+                            if (t.length > 0) t += ', ';
+                            if (type === 'pull') {
+                                if (indexedList[item] !== undefined) {
+                                    t += indexedList[item];
+                                } else {
+                                    t += item;
+                                }
+                            } else {
+                                t += indexedList[item] !== undefined ? indexedList[item] : item;
+                            }
+                        });
+                        $('#' + type + '_' + field + '_' + status + '_text').text(t);
+                    } else {
+                        $('#' + type + '_' + field + '_' + status).hide();
+                    }
                 }
             });
         });
@@ -3693,12 +3769,11 @@ function toggleBoolFilter(url, param) {
     xhr({
         type: "get",
         url: url,
-        success:function (data) {
+        success: function (data) {
             $("#attributes_div").html(data);
             querybuilderTool = undefined;
-
         },
-        error:function() {
+        error: function() {
             showMessage('fail', 'Something went wrong - could not fetch attributes.');
         }
     });
@@ -3893,7 +3968,7 @@ function flashErrorPopover() {
     $("#gray_out").fadeIn();
 }
 
-$('body').on('click', function (e) {
+$(document.body).on('click', function (e) {
   $('[data-toggle=popover]').each(function () {
     // hide any open popovers when the anywhere else in the body is clicked
     if (typeof currentPopover !== 'undefined' && currentPopover !== '') {
@@ -4034,6 +4109,7 @@ function feedFormUpdate() {
         $('#DeleteLocalFileDiv').hide();
         $('#HeadersDiv').show();
     }
+    feedDistributionChange();
 }
 
 function setContextFields() {
@@ -4214,7 +4290,11 @@ function checkAndSetPublishedInfo(skip_reload) {
     if (typeof skip_reload === "undefined") {
         skip_reload = false;
     }
-    var id = $('#hiddenSideMenuData').data('event-id');
+    var $el = $('#hiddenSideMenuData');
+    if ($el.length === 0) {
+        return;
+    }
+    var id = $el.data('event-id');
     if (id !== 'undefined' && !skip_reload) {
         $.get(baseurl + "/events/checkPublishedStatus/" + id, function(data) {
             if (data == 1) {
@@ -4521,7 +4601,7 @@ function checkNoticeList(type) {
 
 }
 
-$(document).ready(function() {
+$(function() {
     // Show popover for disabled input that contains `data-disabled-reason`.
     $('input:disabled[data-disabled-reason]').popover("destroy").popover({
         placement: 'right',
@@ -4576,7 +4656,7 @@ $(document).ready(function() {
         var url = $(this).data('checkbox-url');
     });
 
-    $('#setHomePage').click(function(event) {
+    $('#setHomePage').parent().click(function(event) {
         event.preventDefault();
         setHomePage();
     });
@@ -4685,7 +4765,7 @@ $(document.body).on('click', '.quickSelect', function() {
     selection.addRange(range);
 });
 
-// Any link with data-paginator attribute will be treat as AJAX paginator
+// Any link with data-paginator attribute will be treated as AJAX paginator
 $(document.body).on('click', 'a[data-paginator]', function (e) {
     e.preventDefault();
     var paginatorTarget = $(this).attr('data-paginator');
@@ -4699,6 +4779,12 @@ $(document.body).on('click', 'a[data-paginator]', function (e) {
         },
         url: $(this).attr('href'),
     });
+});
+
+// Any link with modal-open class will be treated as generic modal
+$(document.body).on('click', 'a.modal-open', function (e) {
+    e.preventDefault();
+    openGenericModal($(this).attr('href'));
 });
 
 function queryEventLock(event_id, timestamp) {
@@ -5143,7 +5229,7 @@ function setHomePage() {
     $.ajax({
         type: 'GET',
         url: baseurl + '/userSettings/setHomePage',
-        success:function (data) {
+        success: function (data) {
             $('#ajax_hidden_container').html(data);
             var currentPage = $('#setHomePage').data('current-page');
             $('#UserSettingPath').val(currentPage);
@@ -5222,7 +5308,7 @@ function redirectIdSelection(scope, action) {
     }
 }
 
-$('body').on('click', '.hex-value-convert', function() {
+$(document.body).on('click', '.hex-value-convert', function() {
     var $hexValueSpan = $(this).parent().children(':first-child');
     var val = $hexValueSpan.text().trim();
     if (!$hexValueSpan.hasClass('binary-representation')) {

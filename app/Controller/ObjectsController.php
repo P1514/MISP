@@ -1,6 +1,7 @@
 <?php
 
 App::uses('AppController', 'Controller');
+App::uses('JsonTool', 'Tools');
 
 /**
  * @property MispObject $MispObject
@@ -9,7 +10,7 @@ class ObjectsController extends AppController
 {
     public $uses = 'MispObject';
 
-    public $components = array('Security' ,'RequestHandler', 'Session');
+    public $components = array('RequestHandler', 'Session');
 
     public $paginate = array(
             'limit' => 20,
@@ -61,7 +62,7 @@ class ObjectsController extends AppController
         }
         $multiple_template_elements = Hash::extract($template['ObjectTemplateElement'], sprintf('{n}[multiple=true]'));
         $multiple_attribute_allowed = array();
-        foreach ($multiple_template_elements as $k => $template_element) {
+        foreach ($multiple_template_elements as $template_element) {
             $relation_type = $template_element['object_relation'] . ':' . $template_element['type'];
             $multiple_attribute_allowed[$relation_type] = true;
         }
@@ -89,6 +90,9 @@ class ObjectsController extends AppController
 
         if (isset($this->request->data['Attribute'])) {
             foreach ($this->request->data['Attribute'] as &$attribute) {
+                if (empty($attribute['uuid'])) {
+                    $attribute['uuid'] = CakeText::uuid();
+                }
                 $validation = $this->MispObject->Attribute->validateAttribute($attribute, false);
                 if ($validation !== true) {
                     $attribute['validation'] = $validation;
@@ -366,40 +370,44 @@ class ObjectsController extends AppController
         if (!$this->_isRest()) {
             $this->MispObject->Event->insertLock($this->Auth->user(), $object['Event']['id']);
         }
-        $template = $this->MispObject->ObjectTemplate->find('first', array(
-            'conditions' => array(
-                'ObjectTemplate.uuid' => $object['Object']['template_uuid'],
-                'ObjectTemplate.version' => $object['Object']['template_version'],
-            ),
-            'recursive' => -1,
-            'contain' => array(
-                'ObjectTemplateElement'
-            )
-        ));
+        if (!empty($object['Object']['template_uuid']) && !empty($object['Object']['template_version'])) {
+            $template = $this->MispObject->ObjectTemplate->find('first', array(
+                'conditions' => array(
+                    'ObjectTemplate.uuid' => $object['Object']['template_uuid'],
+                    'ObjectTemplate.version' => $object['Object']['template_version'],
+                ),
+                'recursive' => -1,
+                'contain' => array(
+                    'ObjectTemplateElement'
+                )
+            ));
+        }
         if (empty($template) && !$this->_isRest() && !$update_template_available) {
             $this->Flash->error('Object cannot be edited, no valid template found. ', ['params' => ['url' => sprintf('/objects/edit/%s/1/0', $id), 'urlName' => __('Force update anyway')]]);
             $this->redirect(array('controller' => 'events', 'action' => 'view', $object['Object']['event_id']));
         }
-        $templateData = $this->MispObject->resolveUpdatedTemplate($template, $object, $update_template_available);
-        $this->set('updateable_attribute', $templateData['updateable_attribute']);
-        $this->set('not_updateable_attribute', $templateData['not_updateable_attribute']);
-        $this->set('original_template_unkown', $templateData['original_template_unkown']);
-        if (!empty($this->Session->read('object_being_created')) && !empty($this->params['named']['cur_object_tmp_uuid'])) {
-            $revisedObjectData = $this->Session->read('object_being_created');
-            if ($this->params['named']['cur_object_tmp_uuid'] == $revisedObjectData['cur_object_tmp_uuid']) { // ensure that the passed session data is for the correct object
-                $revisedObjectData = $revisedObjectData['data'];
-            } else {
-                $this->Session->delete('object_being_created');
-                $revisedObjectData = array();
+        if (!empty($template)) {
+            $templateData = $this->MispObject->resolveUpdatedTemplate($template, $object, $update_template_available);
+            $this->set('updateable_attribute', $templateData['updateable_attribute']);
+            $this->set('not_updateable_attribute', $templateData['not_updateable_attribute']);
+            $this->set('original_template_unkown', $templateData['original_template_unkown']);
+            if (!empty($this->Session->read('object_being_created')) && !empty($this->params['named']['cur_object_tmp_uuid'])) {
+                $revisedObjectData = $this->Session->read('object_being_created');
+                if ($this->params['named']['cur_object_tmp_uuid'] == $revisedObjectData['cur_object_tmp_uuid']) { // ensure that the passed session data is for the correct object
+                    $revisedObjectData = $revisedObjectData['data'];
+                } else {
+                    $this->Session->delete('object_being_created');
+                    $revisedObjectData = array();
+                }
             }
-        }
-        if (!empty($revisedObjectData)) {
-            $revisedData = $this->MispObject->reviseObject($revisedObjectData, $object, $template);
-            $this->set('revised_object', $revisedData['revised_object_both']);
-            $object = $revisedData['object'];
-        }
-        if (!empty($templateData['template'])) {
-            $template = $this->MispObject->prepareTemplate($templateData['template'], $object);
+            if (!empty($revisedObjectData)) {
+                $revisedData = $this->MispObject->reviseObject($revisedObjectData, $object, $template);
+                $this->set('revised_object', $revisedData['revised_object_both']);
+                $object = $revisedData['object'];
+            }
+            if (!empty($templateData['template'])) {
+                $template = $this->MispObject->prepareTemplate($templateData['template'], $object);
+            }
         }
         if ($this->request->is('post') || $this->request->is('put')) {
             $this->Session->delete('object_being_created');
@@ -410,7 +418,7 @@ class ObjectsController extends AppController
               $this->request->data['Object'] = $this->request->data;
             }
             if (isset($this->request->data['Object']['data'])) {
-                $this->request->data = json_decode($this->request->data['Object']['data'], true);
+                $this->request->data = JsonTool::decode($this->request->data['Object']['data']);
             }
             if (isset($this->request->data['Object'])) {
                 $this->request->data = array_merge($this->request->data, $this->request->data['Object']);
@@ -419,15 +427,14 @@ class ObjectsController extends AppController
             $objectToSave = $this->MispObject->attributeCleanup($this->request->data);
             $objectToSave = $this->MispObject->deltaMerge($object, $objectToSave, $onlyAddNewAttribute, $this->Auth->user());
             $error_message = __('Object could not be saved.');
-            if (!is_numeric($objectToSave)){
+            $savedObject = array();
+            if (!is_numeric($objectToSave)) {
                 $object_validation_errors = array();
                 foreach($objectToSave as $field => $field_errors) {
                     $object_validation_errors[] = sprintf('%s: %s', $field,  implode(', ', $field_errors));
                 }
                 $error_message = __('Object could not be saved.') . PHP_EOL . implode(PHP_EOL, $object_validation_errors);
-            }
-            $savedObject = array();
-            if (is_numeric($objectToSave)) {
+            } else {
                 $savedObject = $this->MispObject->fetchObjects($this->Auth->user(), array('conditions' => array('Object.id' => $object['Object']['id'])));
                 if (isset($this->request->data['deleted']) && $this->request->data['deleted']) {
                     $this->MispObject->deleteObject($savedObject[0], $hard=false, $unpublish=false);

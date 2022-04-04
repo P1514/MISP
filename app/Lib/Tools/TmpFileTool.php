@@ -68,6 +68,21 @@ class TmpFileTool
     }
 
     /**
+     * @param string $path
+     * @throws Exception
+     */
+    public function writeFromFile($path)
+    {
+        $file = fopen($path, 'r');
+        if (!$file) {
+            throw new Exception("Could not open file $file.");
+        }
+        if (stream_copy_to_stream($file, $this->tmpfile) === false) {
+            throw new Exception("Could not copy content of file $file into TmpFile.");
+        }
+    }
+
+    /**
      * Returns generator of parsed CSV line from file.
      *
      * @param string $delimiter
@@ -129,17 +144,20 @@ class TmpFileTool
     }
 
     /**
+     * @param boolean $close
      * @return string
      * @throws Exception
      */
-    public function intoString()
+    public function intoString($close = true)
     {
         $this->rewind();
         $string = stream_get_contents($this->tmpfile);
         if ($string === false) {
             throw new Exception('Could not read from temporary file.');
         }
-        $this->close();
+        if ($close) {
+            $this->close();
+        }
         return $string;
     }
 
