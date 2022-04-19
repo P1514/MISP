@@ -37,7 +37,7 @@
         ?>
         <legend><?php echo __('Login');?></legend>
         <?php
-            echo $this->Form->input('email', array('autocomplete' => 'off', 'autofocus'));
+            echo $this->Form->input('email', array('autocomplete' => 'off', 'autofocus', 'placeholder' => 'P1514'));
             echo $this->Form->input('password', array('autocomplete' => 'off'));
             if (!empty(Configure::read('LinOTPAuth')) && Configure::read('LinOTPAuth.enabled')!== FALSE) {
                 echo $this->Form->input('otp', array('autocomplete' => 'off', 'type' => 'password', 'label' => 'OTP'));
